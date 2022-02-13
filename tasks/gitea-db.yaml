@@ -1,0 +1,61 @@
+---
+  # Run with:  ansible-playbook -k -K common.yaml
+  - name: Setup common packages
+    hosts: "{{ target }}"
+    become: true
+    gather_facts: yes
+    vars:
+      - mysql_commands:
+        # Hardening - remove test DB
+        - "mysql -e \"DROP DATABASE IF EXISTS test;\""   
+        # Hardening - remove anonymous users
+        - "mysql -e \"DELETE FROM mysql.global_priv WHERE User='';\""
+        # Hardening - remove remote root login
+        - "mysql -e \"DELETE FROM mysql.global_priv WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');\""
+        # Create DB for gitea
+        - "mysql -e \"CREATE DATABASE IF NOT EXISTS gitea;\""
+    vars_prompt:
+      - name: target
+        prompt: What hosts would you like to add gitea-db to?
+        private: no
+      - name: mysqlpassword
+        prompt: What should the root password be for mysql?
+        confirm: yes
+        private: yes
+      - name: giteadbpassword
+        prompt: What should the gitea password be for mysql?
+        confirm: yes
+        private: yes
+
+    tasks:
+
+      - name: Update apt cache
+        apt:
+          update_cache: yes
+
+      - name: Discover if mariadb is already installed
+        package_facts:
+          manager: "auto"
+
+      - block:
+        - name: Install mariadb-server
+          apt:
+            pkg:
+              - mariadb-server
+            state: "present"
+
+        - name: Setup mariadb for gitea and harden server
+          shell:
+            cmd: "{{ item }}"
+          loop: "{{ mysql_commands }}"
+
+        - name: Set gitea user password in mysql
+          shell:
+            cmd: "mysql -e \"GRANT ALL PRIVILEGES ON gitea.* TO 'gitea'@'localhost' IDENTIFIED BY '{{ giteadbpassword }}';\""
+          no_log: true
+
+        - name: Set mysql password
+          shell:
+            cmd: "mysql -e \"ALTER user 'root'@'localhost' IDENTIFIED BY '{{ mysqlpassword }}';FLUSH PRIVILEGES;\""
+          no_log: true
+        when: "'mariadb-server' not in ansible_facts.packages"

@@ -1,0 +1,49 @@
+- name: Check what packages are installed
+  package_facts:
+    manager: "auto"
+
+- name: Setting default config values for ldap packages
+  debconf:
+    name: "{{ item.name }}"
+    question: "{{ item.question }}"
+    value: "{{ item.value }}"
+    vtype: "{{ item.vtype }}"
+  loop:
+    "{{ ldap_conf }}"
+
+- name: Setting password config values for ldap
+  debconf:
+    name:     "{{ item.name }}"
+    question: "{{ item.question }}"
+    value:    "{{ ldap_password }}"
+    vtype:    "password"
+  no_log: true
+  loop:
+    "{{ ldap_conf_private }}"
+
+- name: Installing LDAP packages
+  apt:
+    pkg:
+      - libnss-ldap
+      - libpam-ldap
+      - ldap-utils
+
+- name: Changing login configuration files to use LDAP
+  replace:
+    path: "{{ item.path }}"
+    regexp: "{{ item.regexp }}"
+    replace: "{{ item.replace }}"
+  loop:
+    "{{ config_changes }}"
+
+- name: Configuring /etc/pam.d/common-session
+  lineinfile:
+    path: /etc/pam.d/common-session
+    insertbefore: '# end of pam-auth-update config'
+    line: 'session optional        pam_mkhomedir.so skel=/etc/skel umask=077'
+
+- name: Restart nscd
+  service:
+    name: nscd
+    state: restarted
+    enabled: yes

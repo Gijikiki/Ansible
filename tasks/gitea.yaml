@@ -1,0 +1,101 @@
+---
+  # Run with:  ansible-playbook -k -K common.yaml
+  - name: Setup common packages
+    hosts: "{{ target }}"
+    become: true
+    gather_facts: yes
+    vars:
+      - localuser:  gitea
+      - localgroup: gitea
+      - localhome:  /opt/gitea
+      - localvar:   /var/lib/gitea
+      - localetc:   /etc/gitea
+      - giteabin:   /usr/local/bin/gitea
+    vars_prompt:
+      - name: target
+        prompt: What hosts would you like to add gitea to?
+        private: no
+
+    tasks:
+
+      - name: Update apt cache
+        apt:
+          update_cache: yes
+
+      - name: Install necessary packages
+        apt:
+          pkg:
+            - bash-completion
+            - curl
+            - git
+            - vim
+            - wget
+          state: present
+
+      - name: Finding latest gitea version
+        shell:
+          cmd: "curl -s https://api.github.com/repos/go-gitea/gitea/releases/latest |grep browser_download_url | cut -d '\"' -f 4 | grep -- 'linux-amd64$'"
+        register: giteadownload
+        changed_when: giteadownload.stdout
+
+
+      - name: Download gitea
+        get_url:
+          url: "{{ giteadownload.stdout }}"
+          dest: "{{ giteabin }}"
+          owner: "root"
+          group: "root"
+          mode: '0755'
+
+      - name: Add local group account for gitea
+        group:
+          name: "{{ localgroup }}"
+          system: true
+          state: "present"
+
+      - name: Add local user account for gitea
+        user:
+            name: "{{ localuser }}"
+            comment: Gitea user account
+            group: "{{ localgroup }}"
+            shell: /bin/bash
+            home: "{{ localhome }}"
+            system: true
+            state: "present"
+            # No password is set to disable the password
+           
+      - name: Create gitea directories in /var/lib
+        file:
+          path: "{{ localvar }}/{{ item }}"
+          state: directory
+          owner: "{{ localuser }}"
+          group: "{{ localgroup }}"
+          mode: '0750'
+        loop:
+          - "custom"
+          - "data"
+          - "indexers"
+          - "public"
+          - "log"
+
+      - name: Create gitea directory in /etc
+        file:
+          path: "{{ localetc }}"
+          state: directory
+          owner: "root"
+          group: "{{ localgroup }}"
+          mode: '0770'
+
+      - name: Copy config file
+        template:
+          src:     "gitea_include/gitea.service.js"
+          dest:    "/etc/systemd/system/gitea.service"
+          owner:   root
+          group:   root
+          mode:    0644
+
+      - name: Enable gitea service
+        service:
+          name: gitea
+          state: restarted
+          enabled: yes

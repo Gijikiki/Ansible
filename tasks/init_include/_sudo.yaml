@@ -1,0 +1,25 @@
+---
+# The following may not be Debian-specific...
+- name: Enable sudo group
+  replace:
+    path: /etc/sudoers
+    regexp: '^%sudo   ALL=(ALL:ALL) ALL$'
+    replace: 'sudo   ALL=(ALL:ALL) ALL'
+  when:
+    - ansible_facts['os_family'] == "Debian"
+
+- name: Add users to sudo group
+  user:
+    name: '{{ item }}'
+    groups: sudo
+    append: yes
+  loop:
+    "{{ defaultusers }}"
+  when:
+    - ansible_facts['os_family'] == "Debian"
+
+- name: Add automation user to no-password sudo
+  lineinfile:
+    path: /etc/sudoers
+    insertafter: 'sudo   ALL=(ALL:ALL) ALL'
+    line: 'automation   ALL=(ALL) NOPASSWD: ALL'

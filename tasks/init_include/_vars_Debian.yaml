@@ -1,0 +1,45 @@
+ldap_conf:
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/dbrootlogin',     'value':'true',                            'vtype':'boolean' }
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/dblogin',         'value':'false',                           'vtype':'boolean' }
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/confperm',        'value':'false',                           'vtype':'boolean' }
+  - { 'name':'libnss-ldap',  'question':'shared/ldapns/base-dn',       'value':"{{ basedn }}",                    'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'shared/ldapns/ldap_version',  'value':'3',                               'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/binddn',          'value':"{{ binddn }}",                    'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/override',        'value':'true',                            'vtype':'boolean' }
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/rootbinddn',      'value':"{{ rootbinddn }}",                'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'shared/ldapns/ldap-server',   'value':"{{ ldapserver }}",                'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'shared/ldapns/ldap_version',  'value':'3',                               'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'libpam-ldap/pam_password',    'value':'crypt',                           'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'shared/ldapns/base-dn',       'value':"{{ basedn }}",                    'vtype':'string'  }
+  - { 'name':'libpam-ldap',  'question':'libpam-ldap/dbrootlogin',     'value':'true',                            'vtype':'boolean' }
+  - { 'name':'libpam-ldap',  'question':'libpam-ldap/binddn',          'value':"{{ binddn }}",                    'vtype':'string'  }
+  - { 'name':'libpam-ldap',  'question':'libpam-ldap/override',        'value':'true',                            'vtype':'boolean' }
+  - { 'name':'libpam-ldap',  'question':'libpam-ldap/rootbinddn',      'value':"{{ rootbinddn }}",                'vtype':'string'  }
+  - { 'name':'libpam-ldap',  'question':'shared/ldapns/ldap-server',   'value':"{{ ldapserver }}",                'vtype':'string'  }
+  - { 'name':'libpam-ldap',  'question':'libpam-ldap/dblogin',         'value':'false',                           'vtype':'boolean' }
+ldap_conf_private:
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/rootbindpw',      'value':'(password omitted)',              'vtype':'string' }
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/bindpw',          'value':'(password omitted)',              'vtype':'string' }
+  - { 'name':'libpam-ldap',  'question':'libpam-ldap/rootbindpw',      'value':'(password omitted)',              'vtype':'string' }
+  - { 'name':'libpam-ldap',  'question':'libpam-ldap/bindpw',          'value':'(password omitted)',              'vtype':'string' }
+config_changes:
+  - {
+      'path': "/etc/pam.d/common-password",
+      'regexp':  '^password(\s*)\[success=1.*$',
+      'replace':  'password        [success=1 user_unknown=ignore default=die]     pam_ldap.so try_Step 4 - Testingfirst_pass'
+    }
+  - {
+      'path': '/etc/nsswitch.conf',
+      'regexp': '^passwd:.*$',
+      'replace': 'passwd:         files systemd compat ldap'
+    }
+  - {
+      'path': '/etc/nsswitch.conf',
+      'regexp': '^group:.*$',
+      'replace': 'group:          files systemd compat ldap'
+    }
+  - {
+      'path': '/etc/nsswitch.conf',
+      'regexp': '^shadow:.*$',
+      'replace': 'shadow:         files compat ldap'
+    }

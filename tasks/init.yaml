@@ -1,0 +1,64 @@
+# Run with ansible-playbook -k -K 
+---
+  - name: Configure target server for LDAP & automation
+    hosts: "{{ target }}"
+    # We need to connect as toor and su to root, since nothing is setup
+    remote_user: toor
+    become_method: su
+    become_user: root
+    become_flags: '-s /bin/sh'
+    become: true
+    gather_facts: yes
+    vars_prompt:
+      - name: target
+        prompt: What hosts would you like to setup?
+        private: no
+      - name: ldap_password
+        prompt: What is the LDAP password
+        unsafe: yes
+        private: yes
+        confirm: yes
+
+    tasks:
+      - name: Include network-specific configuration
+        include_vars: "/etc/ansible-secure/network.yaml"
+
+      - name: Include OS-specific configuration
+        include_vars: "init_include/_vars_{{ ansible_facts['os_family'] }}.yaml"
+
+      - name: Setup needed packages
+        include_tasks: "init_include/_packages_{{ ansible_facts['os_family'] }}.yaml"
+
+      - name: Setup LDAP
+        include_tasks: "init_include/_ldap_{{ ansible_facts['os_family'] }}.yaml"
+
+      - name: Setup sudo
+        include_tasks: "init_include/_sudo.yaml"
+
+      - name: Create home directories for certain users
+        shell:
+          cmd: 'su {{ item }} -c exit'
+        loop:
+          "{{ defaultusers }}"
+
+      - name: Create the .ssh directories for certain users
+        file:
+          path: "/home/{{ item }}/.ssh"
+          state: directory
+          force: no
+          owner: "{{ item }}"
+          group: "{{ item }}"
+          mode: 0700
+        loop:
+          "{{ defaultusers }}"
+
+      - name: Copy ssh keys over for each user if they don't exist
+        copy:
+          src:  "/etc/ansible-secure/home/{{ item }}/authorized_keys"
+          dest: "/home/{{ item }}/.ssh/authorized_keys"
+          force: no
+          owner: "{{ item }}"
+          group: "{{ item }}"
+          mode: 0600
+        loop:
+          "{{ defaultusers }}"
