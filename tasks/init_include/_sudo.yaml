@@ -14,7 +14,7 @@
     groups: sudo
     append: yes
   loop:
-    "{{ defaultusers }}"
+    "{{ vault_defaultusers }}"
   when:
     - ansible_facts['os_family'] == "Debian"
 

@@ -2,20 +2,20 @@ ldap_conf:
   - { 'name':'libnss-ldap',  'question':'libnss-ldap/dbrootlogin',     'value':'true',                            'vtype':'boolean' }
   - { 'name':'libnss-ldap',  'question':'libnss-ldap/dblogin',         'value':'false',                           'vtype':'boolean' }
   - { 'name':'libnss-ldap',  'question':'libnss-ldap/confperm',        'value':'false',                           'vtype':'boolean' }
-  - { 'name':'libnss-ldap',  'question':'shared/ldapns/base-dn',       'value':"{{ basedn }}",                    'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'shared/ldapns/base-dn',       'value':"{{ vault_basedn }}",              'vtype':'string'  }
   - { 'name':'libnss-ldap',  'question':'shared/ldapns/ldap_version',  'value':'3',                               'vtype':'string'  }
-  - { 'name':'libnss-ldap',  'question':'libnss-ldap/binddn',          'value':"{{ binddn }}",                    'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/binddn',          'value':"{{ vault_binddn }}",              'vtype':'string'  }
   - { 'name':'libnss-ldap',  'question':'libnss-ldap/override',        'value':'true',                            'vtype':'boolean' }
-  - { 'name':'libnss-ldap',  'question':'libnss-ldap/rootbinddn',      'value':"{{ rootbinddn }}",                'vtype':'string'  }
-  - { 'name':'libnss-ldap',  'question':'shared/ldapns/ldap-server',   'value':"{{ ldapserver }}",                'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'libnss-ldap/rootbinddn',      'value':"{{ vault_rootbinddn }}",          'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'shared/ldapns/ldap-server',   'value':"{{ vault_ldapserver }}",          'vtype':'string'  }
   - { 'name':'libnss-ldap',  'question':'shared/ldapns/ldap_version',  'value':'3',                               'vtype':'string'  }
   - { 'name':'libnss-ldap',  'question':'libpam-ldap/pam_password',    'value':'crypt',                           'vtype':'string'  }
-  - { 'name':'libnss-ldap',  'question':'shared/ldapns/base-dn',       'value':"{{ basedn }}",                    'vtype':'string'  }
+  - { 'name':'libnss-ldap',  'question':'shared/ldapns/base-dn',       'value':"{{ vault_basedn }}",              'vtype':'string'  }
   - { 'name':'libpam-ldap',  'question':'libpam-ldap/dbrootlogin',     'value':'true',                            'vtype':'boolean' }
-  - { 'name':'libpam-ldap',  'question':'libpam-ldap/binddn',          'value':"{{ binddn }}",                    'vtype':'string'  }
+  - { 'name':'libpam-ldap',  'question':'libpam-ldap/binddn',          'value':"{{ vault_binddn }}",              'vtype':'string'  }
   - { 'name':'libpam-ldap',  'question':'libpam-ldap/override',        'value':'true',                            'vtype':'boolean' }
-  - { 'name':'libpam-ldap',  'question':'libpam-ldap/rootbinddn',      'value':"{{ rootbinddn }}",                'vtype':'string'  }
-  - { 'name':'libpam-ldap',  'question':'shared/ldapns/ldap-server',   'value':"{{ ldapserver }}",                'vtype':'string'  }
+  - { 'name':'libpam-ldap',  'question':'libpam-ldap/rootbinddn',      'value':"{{ vault_rootbinddn }}",          'vtype':'string'  }
+  - { 'name':'libpam-ldap',  'question':'shared/ldapns/ldap-server',   'value':"{{ vault_ldapserver }}",          'vtype':'string'  }
   - { 'name':'libpam-ldap',  'question':'libpam-ldap/dblogin',         'value':'false',                           'vtype':'boolean' }
 ldap_conf_private:
   - { 'name':'libnss-ldap',  'question':'libnss-ldap/rootbindpw',      'value':'(password omitted)',              'vtype':'string' }

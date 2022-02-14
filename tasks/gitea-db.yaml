@@ -14,21 +14,16 @@
         - "mysql -e \"DELETE FROM mysql.global_priv WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');\""
         # Create DB for gitea
         - "mysql -e \"CREATE DATABASE IF NOT EXISTS gitea;\""
+      - mysqlpassword: "{{ vault_mysqlpassword }}"
+      - giteapassword: "{{ vault_giteapassword }}"
     vars_prompt:
       - name: target
         prompt: What hosts would you like to add gitea-db to?
         private: no
-      - name: mysqlpassword
-        prompt: What should the root password be for mysql?
-        confirm: yes
-        private: yes
-      - name: giteadbpassword
-        prompt: What should the gitea password be for mysql?
-        confirm: yes
-        private: yes
+    vars_files:
+      - "/etc/ansible-secure/vault.yaml"
 
     tasks:
-
       - name: Update apt cache
         apt:
           update_cache: yes
@@ -51,7 +46,7 @@
 
         - name: Set gitea user password in mysql
           shell:
-            cmd: "mysql -e \"GRANT ALL PRIVILEGES ON gitea.* TO 'gitea'@'localhost' IDENTIFIED BY '{{ giteadbpassword }}';\""
+            cmd: "mysql -e \"GRANT ALL PRIVILEGES ON gitea.* TO 'gitea'@'localhost' IDENTIFIED BY '{{ giteapassword }}';\""
           no_log: true
 
         - name: Set mysql password

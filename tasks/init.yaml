@@ -9,19 +9,17 @@
     become_flags: '-s /bin/sh'
     become: true
     gather_facts: yes
+    vars:
+      - defaultusers: "{{ vault_defaultusers }}"
+      - ldap_password: "{{ vault_ldappassword }}"
     vars_prompt:
       - name: target
         prompt: What hosts would you like to setup?
         private: no
-      - name: ldap_password
-        prompt: What is the LDAP password
-        unsafe: yes
-        private: yes
-        confirm: yes
+    vars_files:
+      - "/etc/ansible-secure/vault.yaml"
 
     tasks:
-      - name: Include network-specific configuration
-        include_vars: "/etc/ansible-secure/network.yaml"
 
       - name: Include OS-specific configuration
         include_vars: "init_include/_vars_{{ ansible_facts['os_family'] }}.yaml"

@@ -18,3 +18,8 @@
       - vim
       - w3m
     state: present
+
+- name: Set vim editor as default
+  shell:
+    cmd: update-alternatives --set editor /usr/bin/vim.basic
+
