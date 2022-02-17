@@ -1,0 +1,39 @@
+---
+  - name: Create a new VM
+    vars_files:
+      - "/etc/ansible-secure/vault.yaml"
+    hosts: "{{ vault_proxmoxsvr }}"
+    become: true
+    gather_facts: no
+    vars:
+      ostype: l26
+      cdrom: "{{ vault_isodeb11 }}"
+      cores:  1
+      sockets: 1
+      memory: 512
+      net0: "e1000,bridge={{ vault_proxbridge }},firewall=1"
+      bootdisk: scsi0
+      scsihw:   virtio-scsi-pci
+      hdsize: 10
+      scsi0: "file=proxmox-storage:{{ hdsize }}"
+      
+    vars_prompt:
+      - name: hostname
+        prompt: What is the name of the new host?
+        private: no
+        confirm: yes
+
+    tasks:
+      - name: Fetch list of proxmox vms
+        shell: qm list | sed 's/\s\+/ /g' | tail -n +2 | cut -d " " -f 3
+        register: qm_output
+        changed_when: false
+
+      - name: Verify new VM's name does not already exist
+        assert:
+          that:
+            - "'{{ hostname }}' not in {{ qm_output.stdout_lines }}"
+
+        # Ansible galaxy has a plugin for proxmox, but cannot be used since it can only create new VMs from templates
+      - name: Create new VM
+        shell: "qm create `pvesh get /cluster/nextid` --name {{ hostname }} --cdrom {{ cdrom }} --numa 0 --ostype {{ ostype }} --cpu cputype=host --cores {{ cores }} --sockets {{ sockets }} --memory {{ memory }} --net0 {{ net0 }} --bootdisk {{ bootdisk }} --scsihw {{ scsihw }} --scsi0 {{ scsi0 }} --agent enabled=1 --onboot 1 --start 1"

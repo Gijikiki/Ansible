@@ -1,0 +1,21 @@
+---
+  - name: Get a list of all VMs
+    hosts: "{{ vault_proxmoxsvr }}"
+    become: true
+    gather_facts: no
+    vars_files:
+      - "/etc/ansible-secure/vault.yaml"
+
+    tasks:
+      - name: Fetch list of proxmox vms
+        shell: qm list | sed 's/\s\+/ /g' | tail -n +2 | cut -d " " -f 3
+        register: qm_output
+        changed_when: false
+
+      - name: List of VMs
+        debug:
+          msg: "{{ item }}"
+        loop: 
+          "{{ qm_output.stdout_lines }}"
+
+
