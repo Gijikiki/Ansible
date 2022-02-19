@@ -7,7 +7,8 @@
     gather_facts: no
     vars:
       ostype: l26
-      cdrom: "{{ vault_isodeb11 }}"
+      iso: "--cdrom {{ vault_isodeb11 }}"
+      config_cdrom: false
       cores:  1
       sockets: 1
       memory: 512
@@ -16,7 +17,9 @@
       scsihw:   virtio-scsi-pci
       hdsize: 10
       scsi0: "file=proxmox-storage:{{ hdsize }}"
-      
+      cdrom: "{{ (config_cdrom | ternary( iso, '' )) }}"
+      passhash: "{{ vault_pxerootpass_encrypted }}"
+
     vars_prompt:
       - name: hostname
         prompt: What is the name of the new host?
@@ -25,15 +28,112 @@
 
     tasks:
       - name: Fetch list of proxmox vms
-        shell: qm list | sed 's/\s\+/ /g' | tail -n +2 | cut -d " " -f 3
+        shell: >
+          set pipefail -o && \
+            qm list | sed "s/\s\+/ /g" | tail -n +2 | cut -d " " -f 3
+        args:
+          executable: /bin/bash
         register: qm_output
         changed_when: false
 
       - name: Verify new VM's name does not already exist
         assert:
-          that:
-            - "'{{ hostname }}' not in {{ qm_output.stdout_lines }}"
+          that: "'{{ hostname }}' not in {{ qm_output.stdout_lines }}"
 
         # Ansible galaxy has a plugin for proxmox, but cannot be used since it can only create new VMs from templates
       - name: Create new VM
-        shell: "qm create `pvesh get /cluster/nextid` --name {{ hostname }} --cdrom {{ cdrom }} --numa 0 --ostype {{ ostype }} --cpu cputype=host --cores {{ cores }} --sockets {{ sockets }} --memory {{ memory }} --net0 {{ net0 }} --bootdisk {{ bootdisk }} --scsihw {{ scsihw }} --scsi0 {{ scsi0 }} --agent enabled=1 --onboot 1 --start 1"
+        shell: "qm create `pvesh get /cluster/nextid` --name {{ hostname }} {{ cdrom }} --numa 0 --ostype {{ ostype }} --cpu cputype=host --cores {{ cores }} --sockets {{ sockets }} --memory {{ memory }} --net0 {{ net0 }} --bootdisk {{ bootdisk }} --scsihw {{ scsihw }} --scsi0 {{ scsi0 }} --agent enabled=1 --onboot 1 --start 0"
+        register: qmcreate
+        changed_when: qmcreate.stdout is regex("Logical volume \"vm-.*-disk-?? created.\"")
+        # Output example:  Logical volume "vm-107-disk-0" created.
+
+      - name: Get VMID for VM we just created
+        shell: >
+          set pipefail -o && qm list | grep -i '^\s\+[0-9]\+\s\+{{ hostname }}\+\s' | sed 's/\s\+/ /g' | cut -d " " -f 2
+        args:
+          executable: /bin/bash
+        register: vmid
+        changed_when: false
+
+      - name: Verify that we have a proper vmid
+        assert:
+          that: vmid.stdout|int > 99
+
+      - name: Get mac address
+        shell: >
+          set pipefail -o && \
+            qm config "{{ vmid.stdout }}" | grep net0 | grep -o -E '[0-F]{2}:[0-F]{2}:[0-F]{2}:[0-F]{2}:[0-F]{2}:[0-F]{2}' | sed 's/:/-/g' | tr [:upper:] [:lower:]
+        args:
+          executable: /bin/bash
+        register: mac
+        changed_when: false
+
+      - name: Print mac address
+        debug:
+          msg: "MAC address is '{{ mac.stdout }}'"
+
+      - name: Creating preseed file
+        local_action:
+          module: copy
+          src:  /etc/ansible-secure/pxe/preseed.txt
+          dest: "/srv/tftp/debian/01-{{ mac.stdout }}.txt"
+          owner: root
+          group: root
+          mode: '0644'
+
+      - name: Modifty preseed file to add password hash
+        local_action:
+          module: replace
+          path: "/srv/tftp/debian/01-{{ mac.stdout }}.txt"
+          regexp: 'PASSWORD_HASH'
+          replace: "{{ passhash }}"
+
+      - name: Create pxeboot file
+        local_action:
+          module: copy
+          src:  /etc/ansible-secure/pxe/default
+          dest: "/srv/tftp/pxelinux.cfg/01-{{ mac.stdout }}"
+          owner: root
+          group: root
+          mode: '0644'
+
+      - name: Modify pxeboot file to point to proper preseed
+        local_action:
+          module: replace
+          path:    "/srv/tftp/pxelinux.cfg/01-{{ mac.stdout }}"
+          regexp:  'PRESEED_FILE'
+          replace: "debian/01-{{ mac.stdout }}.txt"
+
+      - name: Modify pxeboot file to use proper hostname
+        local_action:
+          module: replace
+          path:    "/srv/tftp/pxelinux.cfg/01-{{ mac.stdout }}"
+          regexp:  'VM_HOSTNAME'
+          replace: "{{ hostname }}"
+
+      - name: Start VM
+        shell: qm start "{{ vmid.stdout }}"
+        retries: 5
+        delay: 60
+
+      - name: Wait for five minutes for vm to start
+        pause:
+          minutes: 5
+
+      - name: Clean up default file
+        local_action:
+          module: file
+          path: "/srv/tftp/debian/01-{{ mac.stdout }}.txt"
+          state: absent
+
+      - name: Clean up pxe file
+        local_action:
+          module: file
+          path:  "/srv/tftp/pxelinux.cfg/01-{{ mac.stdout }}"
+          state: absent
+
+      - name: Add to inventory
+        local_action:
+          module: add_host
+          hostname: "{{ hostname }}.{{vault_domain}}"
+          groups:   "new_vm"
