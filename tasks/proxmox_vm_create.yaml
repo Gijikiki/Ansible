@@ -116,9 +116,9 @@
         retries: 5
         delay: 60
 
-      - name: Wait for five minutes for vm to start
+      - name: Wait for two minutes for vm to boot from pxe and start install
         pause:
-          minutes: 5
+          minutes: 2
 
       - name: Clean up default file
         local_action:

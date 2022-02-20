@@ -1,9 +1,11 @@
-# Run with ansible-playbook -k -K 
 ---
   - name: Configure target server for LDAP & automation
     hosts: "{{ target }}"
-    # We need to connect as toor and su to root, since nothing is setup
-    remote_user: toor
+    vars_files:
+      - "/etc/ansible-secure/vault.yaml"
+    # We need to connect as the initial setup user and su to root, 
+    #   since nothing is setup
+    remote_user:      "{{ vault_init_user }}"
     become_method: su
     become_user: root
     become_flags: '-s /bin/sh'
@@ -12,12 +14,12 @@
     vars:
       - defaultusers: "{{ vault_defaultusers }}"
       - ldap_password: "{{ vault_ldappassword }}"
+      - ansible_ssh_pass: "{{ vault_init_password }}"
+      - ansible_become_password: "{{ vault_root_password }}"
     vars_prompt:
       - name: target
         prompt: What hosts would you like to setup?
         private: no
-    vars_files:
-      - "/etc/ansible-secure/vault.yaml"
 
     tasks:
 
