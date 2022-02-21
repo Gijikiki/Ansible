@@ -65,51 +65,38 @@
             qm config "{{ vmid.stdout }}" | grep net0 | grep -o -E '[0-F]{2}:[0-F]{2}:[0-F]{2}:[0-F]{2}:[0-F]{2}:[0-F]{2}' | sed 's/:/-/g' | tr [:upper:] [:lower:]
         args:
           executable: /bin/bash
-        register: mac
+        register: mac_raw
         changed_when: false
+
+      - name: Saving mac address & filenames
+        set_fact:
+          mac_addr:            "{{ mac_raw.stdout }}"
+          preseed_file:        "debian/01-{{ mac_raw.stdout }}.txt"
+          preseed_file_dest:   "/srv/tftp/debian/01-{{ mac_raw.stdout }}.txt"
+          pxeconfig_file:      "01-{{ mac_raw.stdout }}"
+          pxeconfig_file_dest: "/srv/tftp/pxelinux.cfg/01-{{ mac_raw.stdout }}"
 
       - name: Print mac address
         debug:
-          msg: "MAC address is '{{ mac.stdout }}'"
+          msg: "MAC address is '{{ mac_addr }}'"
 
       - name: Creating preseed file
         local_action:
-          module: copy
-          src:  /etc/ansible-secure/pxe/preseed.txt
-          dest: "/srv/tftp/debian/01-{{ mac.stdout }}.txt"
+          module: template
+          src:  /etc/ansible-secure/pxe/preseed.txt.js
+          dest: "{{ preseed_file_dest }}"
           owner: root
           group: root
           mode: '0644'
-
-      - name: Modifty preseed file to add password hash
-        local_action:
-          module: replace
-          path: "/srv/tftp/debian/01-{{ mac.stdout }}.txt"
-          regexp: 'PASSWORD_HASH'
-          replace: "{{ passhash }}"
 
       - name: Create pxeboot file
         local_action:
-          module: copy
-          src:  /etc/ansible-secure/pxe/default
-          dest: "/srv/tftp/pxelinux.cfg/01-{{ mac.stdout }}"
+          module: template
+          src:  /etc/ansible-secure/pxe/default.js
+          dest: "/srv/tftp/pxelinux.cfg/01-{{ mac_addr }}"
           owner: root
           group: root
           mode: '0644'
-
-      - name: Modify pxeboot file to point to proper preseed
-        local_action:
-          module: replace
-          path:    "/srv/tftp/pxelinux.cfg/01-{{ mac.stdout }}"
-          regexp:  'PRESEED_FILE'
-          replace: "debian/01-{{ mac.stdout }}.txt"
-
-      - name: Modify pxeboot file to use proper hostname
-        local_action:
-          module: replace
-          path:    "/srv/tftp/pxelinux.cfg/01-{{ mac.stdout }}"
-          regexp:  'VM_HOSTNAME'
-          replace: "{{ hostname }}"
 
       - name: Start VM
         shell: qm start "{{ vmid.stdout }}"
@@ -123,13 +110,13 @@
       - name: Clean up default file
         local_action:
           module: file
-          path: "/srv/tftp/debian/01-{{ mac.stdout }}.txt"
+          path: "{{ preseed_file_dest }}"
           state: absent
 
       - name: Clean up pxe file
         local_action:
           module: file
-          path:  "/srv/tftp/pxelinux.cfg/01-{{ mac.stdout }}"
+          path:  "{{ pxeconfig_file_dest }}"
           state: absent
 
       - name: Add to inventory
