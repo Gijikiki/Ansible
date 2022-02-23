@@ -6,19 +6,19 @@
     become: true
     gather_facts: no
     vars:
-      ostype: l26
-      iso: "--cdrom {{ vault_isodeb11 }}"
-      config_cdrom: false
-      cores:  1
-      sockets: 1
-      memory: 512
-      net0: "e1000,bridge={{ vault_proxbridge }},firewall=1"
-      bootdisk: scsi0
-      scsihw:   virtio-scsi-pci
-      hdsize: 10
-      scsi0: "file=proxmox-storage:{{ hdsize }}"
-      cdrom: "{{ (config_cdrom | ternary( iso, '' )) }}"
-      passhash: "{{ vault_pxerootpass_encrypted }}"
+      - ostype: l26
+      - iso: "--cdrom {{ vault_isodeb11 }}"
+      - config_cdrom: false
+      - cores:  1
+      - sockets: 1
+      - memory: 512
+      - net0: "e1000,bridge={{ vault_proxbridge }},firewall=1"
+      - bootdisk: scsi0
+      - scsihw:   virtio-scsi-pci
+      - hdsize: 10
+      - scsi0: "file=proxmox-storage:{{ hdsize }}"
+      - cdrom: "{{ (config_cdrom | ternary( iso, '' )) }}"
+      - passhash: "{{ vault_pxerootpass_encrypted }}"
 
     vars_prompt:
       - name: hostname
@@ -27,6 +27,10 @@
         confirm: yes
 
     tasks:
+      - name: Create full hostname
+        set_fact:
+          hostname_full: "{{ hostname }}.{{ vault_domain }}"
+
       - name: Fetch list of proxmox vms
         shell: >
           set pipefail -o && \
@@ -103,9 +107,12 @@
         retries: 5
         delay: 60
 
-      - name: Wait for two minutes for vm to boot from pxe and start install
-        pause:
-          minutes: 2
+      - name: Wait until new host comes up
+        wait_for:
+          host: "{{ hostname_full }}"
+          port: 22
+          delay: 60
+          timeout: 600
 
       - name: Clean up default file
         local_action:
@@ -122,5 +129,68 @@
       - name: Add to inventory
         local_action:
           module: add_host
-          hostname: "{{ hostname }}.{{vault_domain}}"
+          hostname: "{{ hostname_full }}"
           groups:   "new_vm"
+
+  - name: Configure target server for LDAP & automation
+    hosts: "{{ hostvars[vault_proxmoxsvr]['hostname_full'] }}"
+    vars_files:
+      - "/etc/ansible-secure/vault.yaml"
+    # We need to connect as the initial setup user and su to root, 
+    #   since nothing is setup
+    remote_user:   "{{ vault_init_user }}"
+    become_method: su
+    become_user: root
+    become_flags: '-s /bin/sh'
+    become: true
+    gather_facts: yes
+    vars:
+      - defaultusers: "{{ vault_defaultusers }}"
+      - ldap_password: "{{ vault_ldappassword }}"
+      - ansible_ssh_pass: "{{ vault_init_password }}"
+      - ansible_become_password: "{{ vault_root_password }}"
+
+    tasks:
+      - name: Wait for new VM to come up
+        wait_for_connection:
+          timeout: 600
+
+      - name: Include OS-specific configuration
+        include_vars: "proxmox_vm_create_include/_vars_{{ ansible_facts['os_family'] }}.yaml"
+
+      - name: Setup needed packages
+        include_tasks: "proxmox_vm_create_include/_packages_{{ ansible_facts['os_family'] }}.yaml"
+
+      - name: Setup LDAP
+        include_tasks: "proxmox_vm_create_include/_ldap_{{ ansible_facts['os_family'] }}.yaml"
+
+      - name: Setup sudo
+        include_tasks: "proxmox_vm_create_include/_sudo.yaml"
+
+      - name: Create home directories for certain users
+        shell:
+          cmd: 'su {{ item }} -c exit'
+        loop:
+          "{{ defaultusers }}"
+
+      - name: Create the .ssh directories for certain users
+        file:
+          path: "/home/{{ item }}/.ssh"
+          state: directory
+          force: no
+          owner: "{{ item }}"
+          group: "{{ item }}"
+          mode: 0700
+        loop:
+          "{{ defaultusers }}"
+
+      - name: Copy ssh keys over for each user if they don't exist
+        copy:
+          src:  "/etc/ansible-secure/home/{{ item }}/authorized_keys"
+          dest: "/home/{{ item }}/.ssh/authorized_keys"
+          force: no
+          owner: "{{ item }}"
+          group: "{{ item }}"
+          mode: 0600
+        loop:
+          "{{ defaultusers }}"

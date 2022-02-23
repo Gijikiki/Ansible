@@ -1,0 +1,25 @@
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Update all packages to the latest version
+  apt:
+    upgrade: dist
+
+- name: Install common packages
+  apt:
+    pkg:
+      - debconf
+      - mlocate
+      - net-tools
+      - qemu-guest-agent
+      - screen
+      - sudo
+      - vim
+      - w3m
+    state: present
+
+- name: Set vim editor as default
+  shell:
+    cmd: update-alternatives --set editor /usr/bin/vim.basic
+
