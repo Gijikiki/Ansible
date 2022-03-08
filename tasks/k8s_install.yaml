@@ -1,5 +1,4 @@
 ---
-  # Run with:  ansible-playbook -k -K common.yaml
   - name: Install k8s on Debian 11 (Bullseye)
     vars_files:
       -  "/etc/ansible-secure/vault.yaml"
@@ -13,7 +12,7 @@
       - kubectluser:  "{{ vault_kubectluser }}"
     vars_prompt:
       - name: target
-        prompt: What hosts would you like to add gitea to?
+        prompt: What hosts would you like to add k8s to?
         private: no
 
     tasks:
