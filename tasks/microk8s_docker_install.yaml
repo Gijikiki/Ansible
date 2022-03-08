@@ -1,0 +1,71 @@
+---
+  - name: Install microk8s and docker on Debian 11 (Bullseye)
+    vars_files:
+      -  "/etc/ansible-secure/vault.yaml"
+    hosts: "{{ target }}"
+    become: true
+    gather_facts: yes
+    vars:
+      - kubernetesusers: "{{ vault_kubernetesusers }}"
+      - snap_bash: |
+          PATH=$PATH:/snap/bin
+          alias kubectl='microk8s kubectl'
+    vars_prompt:
+      - name: target
+        prompt: What hosts would you like to add microk8s and docker to?
+        private: no
+
+    tasks:
+      - name: Make sure packages are up to date
+        apt:
+          update_cache: yes
+          upgrade: yes
+
+      - name: Install necessary packages
+        apt:
+          pkg:
+            - gnupg2
+            - curl
+            - apt-transport-https
+            - gnupg
+            - lsb-release
+            - ca-certificates
+            - snapd
+          state: present
+
+      - name: Add docker repository gpg key
+        ansible.builtin.apt_key:
+          url:   "https://download.docker.com/linux/debian/gpg"
+          state: present
+
+      - name: Add repository for docker
+        ansible.builtin.apt_repository:
+          repo: "deb http://download.docker.com/linux/debian bullseye stable"
+          state: present
+          filename: docker.list
+          update_cache: yes
+
+      - name: Install required packages
+        apt:
+          pkg:
+            - docker-ce
+            - docker-ce-cli
+            - containerd.io
+
+      - name: Install microk8s
+        community.general.snap:
+          name:    microk8s
+          classic: yes
+
+      - name: Add snap to the directory path
+        copy:
+          dest: /etc/profile.d/snap-path.sh
+          content: "{{ snap_bash }}"
+
+      - name: Give permission to kubernetes users
+        user:
+          name: "{{ item }}"
+          groups: microk8s
+          append: yes
+        loop: "{{ kubernetesusers }}"
+
