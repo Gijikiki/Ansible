@@ -38,12 +38,9 @@
 
       - name: Add repository for kubernetes
         ansible.builtin.apt_repository:
-          repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+          repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
           state: present
-          filename: kubernetes.list
-
-      - name: Update again
-        apt:
+          filename: kubernetes
           update_cache: yes
 
       - name: Install required packages
@@ -67,10 +64,10 @@
           - "kubectl"
 
       - name: Disable swap in fstab
-	replace:
-	    path: /etc/fstab
-	    regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
-	    replace: '# \1'
+        replace:
+          path: /etc/fstab
+          regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+          replace: '# \1'
 
       - name: Disable swap
         shell: |
@@ -96,18 +93,6 @@
         shell: |
           sysctl --system
 
-      - name: Add first repository for CRI-O
-        ansible.builtin.apt_repository:
-          repo: "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/ /"
-          state: present
-          filename: devel:kubic:libcontainers:stable.list
-
-      - name: Add second repository for CRI-O
-        ansible.builtin.apt_repository:
-          repo: "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ download_version }}/{{ download_os }}/ /"
-          state: present
-          filename: "devel:kubic:libcontainers:stable:cri-o:{{ download_version }}.list"
-
       - name: Add first key for CRI-O
         ansible.builtin.apt_key:
           url: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/Release.key"
@@ -117,6 +102,20 @@
         ansible.builtin.apt_key:
           url: "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:{{ download_version }}/{{ download_os }}/Release.key"
           state: present
+
+      - name: Add first repository for CRI-O
+        ansible.builtin.apt_repository:
+          repo: "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/ /"
+          state: present
+          filename: devel:kubic:libcontainers:stable.list
+          update_cache: yes
+
+      - name: Add second repository for CRI-O
+        ansible.builtin.apt_repository:
+          repo: "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ download_version }}/{{ download_os }}/ /"
+          state: present
+          filename: "devel:kubic:libcontainers:stable:cri-o:{{ download_version }}.list"
+          update_cache: yes
 
       - name: Update to fetch CRI-O repos
         apt:
@@ -133,3 +132,9 @@
           name: crio
           enabled: yes
           daemon_reload: yes
+          state: started
+
+      - name: Enable kubelet service
+        ansible.builtin.systemd:
+          name: kubelet
+          enabled: yes

@@ -52,11 +52,13 @@
         # Output example:  Logical volume "vm-107-disk-0" created.
 
       - name: Remove VM name from known hosts, if exists
-        name: "{{ hostname }}"
+        known_hosts: 
+          name:  "{{ hostname }}"
           state: absent
 
       - name: Remove the other possible hostname, if exists
-        name: "{{ hostname_full }}"
+        known_hosts: 
+          name:  "{{ hostname_full }}"
           state: absent
 
       - name: Get VMID for VM we just created
