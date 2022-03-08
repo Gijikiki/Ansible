@@ -51,6 +51,14 @@
         changed_when: qmcreate.stdout is regex("Logical volume \"vm-.*-disk-?? created.\"")
         # Output example:  Logical volume "vm-107-disk-0" created.
 
+      - name: Remove VM name from known hosts, if exists
+        name: "{{ hostname }}"
+          state: absent
+
+      - name: Remove the other possible hostname, if exists
+        name: "{{ hostname_full }}"
+          state: absent
+
       - name: Get VMID for VM we just created
         shell: >
           set pipefail -o && qm list | grep -i '^\s\+[0-9]\+\s\+{{ hostname }}\+\s' | sed 's/\s\+/ /g' | cut -d " " -f 2
@@ -153,7 +161,7 @@
     tasks:
       - name: Wait for new VM to come up
         wait_for_connection:
-          timeout: 600
+          timeout: 1200
 
       - name: Include OS-specific configuration
         include_vars: "proxmox_vm_create_include/_vars_{{ ansible_facts['os_family'] }}.yaml"
