@@ -1,0 +1,92 @@
+---
+# tasks file for gluster
+ 
+## TODO:  Share ssh keys
+
+- name: Install gluster and lvm2
+  package:
+    name: glusterfs-server glusterfs-client lvm2
+    state: present
+
+- name: Enable gluster
+  systemd:
+    name: glusterfs-server
+    state: started
+    enabled: yes
+
+  # FIXME: Need to define this variable and ensure it's on one peer
+- name: Probe Peers
+  gluster.gluster.gluster_peer:
+    state: present
+    nodes: "{{ item }}"
+  loop: "{{ gluster_other_peers }}"
+
+- name: Create mountpoint for brickets
+  file:
+    path: /gluster/brick0
+    state: directory
+    mode: '0600'
+
+  # FIXME: Need to create a partition
+- name: Create the partition
+  community.general.parted:
+    device: "{{ brick_drive }}"
+    number: 1
+    flags: [ lvm ]
+    state: present
+
+- name: Create the volume group
+  community.general.lvg:
+    vg:  gluster-vg0
+    pvs: "{{ brick_drive }}1"
+    pvsize: yes
+
+- name: Create the thin pool
+  community.general.lvol:
+    vg: gluster-vg0
+    thinpool: gluster-thinpool0
+    size: 100%PVS
+    # opts: -Z n
+
+- name: Create the lv for gluster
+  community.general.lvol:
+    vg: gluster-thinpool0
+    lv: gluster-lv0
+    size: 50%PVS
+
+- name: Format the lv
+  community.general.filesystem:
+    fstype: xfs
+    dev: /dev/gluster-vg0/gluster-lv0
+    opts: -i size=512
+
+- name: Mount the lv
+  ansible.posix.mount:
+    path: /gluster/brick0
+    src: /dev/gluster-vg0/gluster-lv0
+    fstype: xfs
+    state: mounted
+
+- name: Add the brick to 
+
+
+
+
+  
+
+  977  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -a 'dmesg | grep sdb'
+  978  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -a 'fdisk -l /dev/sdb'
+  979  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -a 'mkfs.xfs -i size=512 /dev/sdb1'
+  980  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -a 'hostname | grep t'
+  981  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'hostname | grep t'
+  982  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'echo "/dev/sdb1 /export/sdb1 xfs defaults 0 0"  >> /etc/fstab'
+  983  history
+  984  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'rmdir -rf /glusterfs'
+  985  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'rm -rf /glusterfs'
+  986  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'mkdir -p /export/sdb1 && mount -a && mkdir -p /export/sdb1/brick'
+  987  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'apt -y install glusterfs-client'
+  988  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'mkdir -p /mnt/gluster'
+  989  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'mount -t glusterfs $HOSTNAME:/gv0 /mnt/gluster'
+  990  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'mount -t glusterfs `hostnname`:/gv0 /mnt/gluster'
+  991  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'mount -t glusterfs `hostnname`.lab.test:/gv0 /mnt/gluster'
+  992  ansible t1.lab.test,t2.lab.test,t3.lab.test --become -m shell -a 'mount -t glusterfs `hostname`.lab.test:/gv0 /mnt/gluster'

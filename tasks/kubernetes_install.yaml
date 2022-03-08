@@ -1,0 +1,135 @@
+---
+  # Run with:  ansible-playbook -k -K common.yaml
+  - name: Setup common packages
+    hosts: "{{ target }}"
+    become: true
+    gather_facts: yes
+    vars:
+      - download_os:      Debian_10
+      - download_version: 1.22
+    vars_prompt:
+      - name: target
+        prompt: What hosts would you like to add gitea to?
+        private: no
+
+    tasks:
+      # Based on https://citizix.com/how-to-set-up-kubernetes-cluster-on-debian-11-with-kubeadm-and-cri-o/
+
+      - name: Update apt cache
+        apt:
+          update_cache: yes
+
+      - name: Upgrade
+        apt:
+          upgrade: yes
+
+      - name: Install necessary packages
+        apt:
+          pkg:
+            - gnupg2
+            - curl
+            - apt-transport-https
+          state: present
+
+      - name: Add apt key for packages.cloud.google.com
+        ansible.builtin.apt_key:
+          url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+          state: present
+
+      - name: Add repository for kubernetes
+        ansible.builtin.apt_repository:
+          repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+          state: present
+          filename: kubernetes.list
+
+      - name: Update again
+        apt:
+          update_cache: yes
+
+      - name: Install required packages
+        apt:
+          pkg:
+            - vim
+            - git
+            - curl
+            - wget
+            - kubelet
+            - kubeadm
+            - kubectl
+
+      - name: Hold several packages
+        dpkg_selections:
+          name: "{{ item }}"
+          selection: hold
+        loop:
+          - "kubelet"
+          - "kubeadm"
+          - "kubectl"
+
+      - name: Disable swap in fstab
+	replace:
+	    path: /etc/fstab
+	    regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+	    replace: '# \1'
+
+      - name: Disable swap
+        shell: |
+          swapoff -a
+
+      - name: Enable overlay module
+        shell: |
+          modprobe overlay
+
+      - name: Enable br_netfilter module
+        shell: |
+          modprobe br_netfilter
+
+      - name: Add settings to sysctl
+        copy:
+          dest: /etc/sysctl.d/kubernetes.conf
+          content: |
+            net.bridge.bridge-nf-call-ip6tables = 1
+            net.bridge.bridge-nf-call-iptables = 1
+            net.ipv4.ip_forward = 1
+
+      - name: Reload sysctl
+        shell: |
+          sysctl --system
+
+      - name: Add first repository for CRI-O
+        ansible.builtin.apt_repository:
+          repo: "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/ /"
+          state: present
+          filename: devel:kubic:libcontainers:stable.list
+
+      - name: Add second repository for CRI-O
+        ansible.builtin.apt_repository:
+          repo: "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ download_version }}/{{ download_os }}/ /"
+          state: present
+          filename: "devel:kubic:libcontainers:stable:cri-o:{{ download_version }}.list"
+
+      - name: Add first key for CRI-O
+        ansible.builtin.apt_key:
+          url: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/Release.key"
+          state: present
+
+      - name: Add second key for CRI-O
+        ansible.builtin.apt_key:
+          url: "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:{{ download_version }}/{{ download_os }}/Release.key"
+          state: present
+
+      - name: Update to fetch CRI-O repos
+        apt:
+          update_cache: yes
+
+      - name: Install CRI-O packages
+        apt:
+          pkg:
+            - cri-o
+            - cri-o-runc
+
+      - name: Enable crio
+        ansible.builtin.systemd:
+          name: crio
+          enabled: yes
+          daemon_reload: yes
