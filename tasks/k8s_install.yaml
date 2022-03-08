@@ -1,12 +1,16 @@
 ---
   # Run with:  ansible-playbook -k -K common.yaml
-  - name: Setup common packages
+  - name: Install k8s on Debian 11 (Bullseye)
+    vars_files:
+      -  "/etc/ansible-secure/vault.yaml"
     hosts: "{{ target }}"
     become: true
     gather_facts: yes
     vars:
       - download_os:      Debian_10
       - download_version: 1.22
+      - defaultusers: "{{ vault_kubernetesusers }}"
+      - kubectluser:  "{{ vault_kubectluser }}"
     vars_prompt:
       - name: target
         prompt: What hosts would you like to add gitea to?
@@ -15,12 +19,9 @@
     tasks:
       # Based on https://citizix.com/how-to-set-up-kubernetes-cluster-on-debian-11-with-kubeadm-and-cri-o/
 
-      - name: Update apt cache
+      - name: Make sure packages are up to date
         apt:
           update_cache: yes
-
-      - name: Upgrade
-        apt:
           upgrade: yes
 
       - name: Install necessary packages
@@ -38,6 +39,7 @@
 
       - name: Add repository for kubernetes
         ansible.builtin.apt_repository:
+          # Must be http due to proxy
           repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
           state: present
           filename: kubernetes
@@ -138,3 +140,48 @@
         ansible.builtin.systemd:
           name: kubelet
           enabled: yes
+          state: started
+
+      - name: Pull required images
+        ansible.builtin.shell:
+          cmd: kubeadm config images pull
+
+      - name: Bootstrap cluster
+        ansible.builtin.shell:
+          cmd: kubeadm init --pod-network-cidr=10.10.0.0/16
+
+      - name: Create user-level directory for ansible config
+        ansible.builtin.file:
+          path: "/home/{{ item }}/.kube"
+          state: directory
+          mode: '0755'
+          owner: "{{ item }}"
+          group: "{{ item }}"
+        loop:
+          "{{ defaultusers }}"
+
+      - name: Copy kubernetes config
+        ansible.builtin.copy:
+          src: /etc/kubernetes/admin.conf
+          dest: "/home/{{ item }}/.kube/config"
+          remote_src: yes
+          owner: "{{ item }}"
+          group: "{{ item }}"
+          mode:  0600
+        loop:
+          "{{ defaultusers }}"
+
+      - name: Run the final kubectl commands as the kubectl user
+        block:
+          - name: Allow control-plane node to run pods (single node cluster setup)
+            shell:
+              cmd: kubectl taint nodes --all node-role.kubernetes.io/master-
+    
+          - name: Install Tigera Calico operator
+            shell:
+              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/tigera-operator.yaml
+    
+          - name: Install Calico
+            shell:
+              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml
+        become_user: "{{ kubectluser }}"
