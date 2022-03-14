@@ -139,7 +139,7 @@
       - name: Add to inventory
         local_action:
           module: add_host
-          hostname: "{{ hostname_full }}"
+          name: "{{ hostname_full }}"
           groups:   "new_vm"
 
   - name: Configure target server for LDAP & automation

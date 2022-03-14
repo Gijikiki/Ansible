@@ -6,8 +6,8 @@
     become: true
     gather_facts: yes
     vars:
-      - download_os:      Debian_10
-      - download_version: 1.22
+      - download_os:      Debian_11
+      - download_version: 1.23
       - defaultusers: "{{ vault_kubernetesusers }}"
       - kubectluser:  "{{ vault_kubectluser }}"
     vars_prompt:
@@ -94,6 +94,17 @@
         shell: |
           sysctl --system
 
+      - name: Bypass proxy for CRI-O packages
+        lineinfile:
+          path:   /etc/apt/apt.conf
+          line:   "{{ item }}"
+          create: yes
+        loop:
+          - "Acquire::http::Proxy::download.opensuse.org DIRECT;"
+          - "Acquire::http::Proxy::downloadcontent.opensuse.org DIRECT;"
+          - "Acquire::http::Proxy::mirrorcache.opensuse.org DIRECT;"
+          - "Acquire::http::Proxy::mirrorcache-us.opensuse.org DIRECT;"
+
       - name: Add first key for CRI-O
         ansible.builtin.apt_key:
           url: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/Release.key"
@@ -106,9 +117,9 @@
 
       - name: Add first repository for CRI-O
         ansible.builtin.apt_repository:
-          repo: "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/ /"
+          repo: "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/ /"
           state: present
-          filename: devel:kubic:libcontainers:stable.list
+          filename: "devel:kubic:libcontainers:stable.list"
           update_cache: yes
 
       - name: Add second repository for CRI-O
