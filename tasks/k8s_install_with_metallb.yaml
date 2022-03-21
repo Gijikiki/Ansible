@@ -187,6 +187,17 @@
           path: "{{ kubeapimanifest }}"
           timeout: 180
 
+      - name: Alter manifest for the apiserver
+        ansible.builtin.lineinfile:
+          path:          "{{ kubeapimanifest }}"
+          regexp:        "^    - --service-node-port-range="
+          line:          "    - --service-node-port-range=80-32767"
+          insertbefore:  "    - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt"
+
+      - name: Wait two minutes for kube-apiserver to begin restarting
+        pause:
+          minutes: 5
+
       - name: Run the final kubectl commands as the kubectl user
         block:
           - name: Wait for kube-apiserver to be running
@@ -199,14 +210,44 @@
             shell:
               cmd: kubectl taint nodes --all node-role.kubernetes.io/master-
     
-          - name: Install Tigera Calico operator
-            shell:
-              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/tigera-operator.yaml
-    
-          - name: Install Calico
-            shell:
-              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml
+#          - name: Install Tigera Calico operator
+#            shell:
+#              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/tigera-operator.yaml
+#    
+#          - name: Install Calico
+#            shell:
+#              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml
 
+          - name: Create metallb namespace
+            shell:
+              cmd: kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
+
+          - name: Wait a minute for the metallb namespace to be created
+            pause:
+              minutes: 1
+
+          - name: Create metallb manifest
+            shell:
+              cmd: kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml 
+
+          - name: Wait a minute for the metallb manifest to be created
+            pause:
+              minutes: 1
+
+          - name: Copy over the metallb configmap to temporary directory
+            ansible.builtin.copy:
+              src:  "/etc/ansible-secure/kubernetes/metallb-configmap.yaml"
+              dest: "~/metallb-configmap.yaml"
+
+          - name: Apply the metallb configmap
+            ansible.builtin.shell:
+              cmd: "kubectl apply -f ~/metallb-configmap.yaml"
+
+          - name: Delete the temporary file
+            ansible.builtin.file:
+              path: "~/metallb-configmap.yaml"
+              state: absent
+           
           - name: Copy over some useful 'hello world' files
             ansible.builtin.copy:
               src: /etc/ansible-secure/kubernetes/k8s-helloworld

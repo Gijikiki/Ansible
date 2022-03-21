@@ -136,11 +136,11 @@
           path:  "{{ pxeconfig_file_dest }}"
           state: absent
 
-      - name: Add to inventory
-        local_action:
-          module: add_host
-          name: "{{ hostname_full }}"
-          groups:   "new_vm"
+      - block:
+        - name: Adding to inventory
+          add_host:
+            name: "{{ hostname_full }}"
+        delegate_to: localhost
 
   - name: Configure target server for LDAP & automation
     hosts: "{{ hostvars[vault_proxmoxsvr]['hostname_full'] }}"
