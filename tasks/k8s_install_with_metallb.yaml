@@ -187,25 +187,8 @@
           path: "{{ kubeapimanifest }}"
           timeout: 180
 
-      - name: Alter manifest for the apiserver
-        ansible.builtin.lineinfile:
-          path:          "{{ kubeapimanifest }}"
-          regexp:        "^    - --service-node-port-range="
-          line:          "    - --service-node-port-range=80-32767"
-          insertbefore:  "    - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt"
-
-      - name: Wait two minutes for kube-apiserver to begin restarting
-        pause:
-          minutes: 5
-
       - name: Run the final kubectl commands as the kubectl user
         block:
-          - name: Wait for kube-apiserver to be running
-            ansible.builtin.shell:
-              cmd: kubectl get all -n kube-system | grep kube-apiserver | grep Running
-            retries: 5
-            delay: 60
-
           - name: Allow control-plane node to run pods (single node cluster setup)
             shell:
               cmd: kubectl taint nodes --all node-role.kubernetes.io/master-
@@ -256,3 +239,10 @@
               group: "{{ kubectluser }}"
               mode: 0600
         become_user: "{{ kubectluser }}"
+
+      - name: Alter manifest for the apiserver
+        ansible.builtin.lineinfile:
+          path:          "{{ kubeapimanifest }}"
+          regexp:        "^    - --service-node-port-range="
+          line:          "    - --service-node-port-range=80-32767"
+          insertbefore:  "    - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt"
