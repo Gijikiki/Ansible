@@ -1,0 +1,29 @@
+---
+  # Run with:  ansible-playbook -k -K common.yaml
+  - name: Setup common packages
+    hosts: "{{ target }}"
+    become: true
+    gather_facts: yes
+    vars:
+      - nodeip:     "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+      - metallbip:  "{{ nodeip | ipmath(100) }}"
+      - hostname:   "{{ ansible_hostname }}"
+    vars_prompt:
+      - name: target
+        prompt: What hosts would you like to get the ip address of?
+        private: no
+
+    tasks:
+
+      - name: Display node IP
+        debug: 
+          msg: "The ip address is: {{ nodeip }}"
+
+      - name: Display hostname
+        debug: 
+          msg: "The hostname is: {{ ansible_hostname }}"
+
+      - name: Display metallb ip
+        debug:
+          msg: "The ip address is: {{ metallbip }}"
+

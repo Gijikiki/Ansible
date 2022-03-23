@@ -189,48 +189,24 @@
 
       - name: Run the final kubectl commands as the kubectl user
         block:
+          - name: Wait for kube-apiserver to be running
+            ansible.builtin.shell:
+              cmd: kubectl get all -n kube-system | grep kube-apiserver | grep Running
+            retries: 5
+            delay: 60
+
           - name: Allow control-plane node to run pods (single node cluster setup)
             shell:
               cmd: kubectl taint nodes --all node-role.kubernetes.io/master-
     
-#          - name: Install Tigera Calico operator
-#            shell:
-#              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/tigera-operator.yaml
-#    
-#          - name: Install Calico
-#            shell:
-#              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml
-
-          - name: Create metallb namespace
+          - name: Install Tigera Calico operator
             shell:
-              cmd: kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
-
-          - name: Wait a minute for the metallb namespace to be created
-            pause:
-              minutes: 1
-
-          - name: Create metallb manifest
+              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/tigera-operator.yaml
+    
+          - name: Install Calico
             shell:
-              cmd: kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml 
+              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml
 
-          - name: Wait a minute for the metallb manifest to be created
-            pause:
-              minutes: 1
-
-          - name: Copy over the metallb configmap to temporary directory
-            ansible.builtin.copy:
-              src:  "/etc/ansible-secure/kubernetes/metallb-configmap.yaml"
-              dest: "~/metallb-configmap.yaml"
-
-          - name: Apply the metallb configmap
-            ansible.builtin.shell:
-              cmd: "kubectl apply -f ~/metallb-configmap.yaml"
-
-          - name: Delete the temporary file
-            ansible.builtin.file:
-              path: "~/metallb-configmap.yaml"
-              state: absent
-           
           - name: Copy over some useful 'hello world' files
             ansible.builtin.copy:
               src: /etc/ansible-secure/kubernetes/k8s-helloworld
@@ -239,10 +215,3 @@
               group: "{{ kubectluser }}"
               mode: 0600
         become_user: "{{ kubectluser }}"
-
-      - name: Alter manifest for the apiserver
-        ansible.builtin.lineinfile:
-          path:          "{{ kubeapimanifest }}"
-          regexp:        "^    - --service-node-port-range="
-          line:          "    - --service-node-port-range=80-32767"
-          insertbefore:  "    - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt"

@@ -8,16 +8,21 @@
     vars:
       - download_os:      Debian_11
       - download_version: 1.23
-      - defaultusers: "{{ vault_kubernetesusers }}"
-      - kubectluser:  "{{ vault_kubectluser }}"
-      - kubeapimanifest: "/etc/kubernetes/manifests/kube-apiserver.yaml"
+      - defaultusers:     "{{ vault_kubernetesusers }}"
+      - kubectluser:      "{{ vault_kubectluser }}"
+      - calico:           true
+      - metallb:          true
+      - ingressnginx:     true
+      - nodeip:           "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+      - metallbip:        "{{ nodeip | ipmath(100) }}"
     vars_prompt:
       - name: target
         prompt: What hosts would you like to add k8s to?
         private: no
 
     tasks:
-      # Based on https://citizix.com/how-to-set-up-kubernetes-cluster-on-debian-11-with-kubeadm-and-cri-o/
+      # Kubernetes install based on:
+      #    https://citizix.com/how-to-set-up-kubernetes-cluster-on-debian-11-with-kubeadm-and-cri-o/
 
       - name: Make sure packages are up to date
         apt:
@@ -32,10 +37,14 @@
             - apt-transport-https
           state: present
 
-      - name: Add apt key for packages.cloud.google.com
+      - name: Add keys for Kubernetes, CRI-O repositories
         ansible.builtin.apt_key:
-          url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+          url: "{{ item }}"
           state: present
+        loop:
+          - "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/Release.key"
+          - "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:{{ download_version }}/{{ download_os }}/Release.key"
+          - "https://packages.cloud.google.com/apt/doc/apt-key.gpg"
 
       - name: Add repository for kubernetes
         ansible.builtin.apt_repository:
@@ -48,13 +57,13 @@
       - name: Install required packages
         apt:
           pkg:
-            - vim
-            - git
-            - curl
-            - wget
-            - kubelet
-            - kubeadm
-            - kubectl
+            - "vim"
+            - "git"
+            - "curl"
+            - "wget"
+            - "kubelet"
+            - "kubeadm"
+            - "kubectl"
 
       - name: Hold several packages
         dpkg_selections:
@@ -71,16 +80,10 @@
           regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
           replace: '# \1'
 
-      - name: Disable swap
-        shell: |
+      - name: Disable swap & enable overlay & br_netfilter modules
+        ansible.builtin.shell: |
           swapoff -a
-
-      - name: Enable overlay module
-        shell: |
           modprobe overlay
-
-      - name: Enable br_netfilter module
-        shell: |
           modprobe br_netfilter
 
       - name: Add settings to sysctl
@@ -92,66 +95,55 @@
             net.ipv4.ip_forward = 1
 
       - name: Reload sysctl
-        shell: |
+        ansible.builtin.shell: |
           sysctl --system
 
-      - name: Bypass proxy for CRI-O packages
-        lineinfile:
-          path:   /etc/apt/apt.conf
-          line:   "{{ item }}"
-          create: yes
+#      - name: Bypass proxy for CRI-O packages
+#        lineinfile:
+#          path:   /etc/apt/apt.conf
+#          line:   "{{ item }}"
+#          create: yes
+#        loop:
+#          - "Acquire::http::Proxy::download.opensuse.org DIRECT;"
+#          - "Acquire::http::Proxy::downloadcontent.opensuse.org DIRECT;"
+#          - "Acquire::http::Proxy::mirrorcache.opensuse.org DIRECT;"
+#          - "Acquire::http::Proxy::mirrorcache-us.opensuse.org DIRECT;"
+#
+#      - name: Add keys for CRI-O
+#        ansible.builtin.apt_key:
+#          url: "{{ item }}"
+#          state: present
+#        loop:
+#          - "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/Release.key"
+#          - "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:{{ download_version }}/{{ download_os }}/Release.key"
+
+      - name: Add repositories for CRI-O
+        ansible.builtin.apt_repository:
+          repo: "{{ item.repo }}"
+          state: present
+          filename: "{{ item.filename }}"
         loop:
-          - "Acquire::http::Proxy::download.opensuse.org DIRECT;"
-          - "Acquire::http::Proxy::downloadcontent.opensuse.org DIRECT;"
-          - "Acquire::http::Proxy::mirrorcache.opensuse.org DIRECT;"
-          - "Acquire::http::Proxy::mirrorcache-us.opensuse.org DIRECT;"
-
-      - name: Add first key for CRI-O
-        ansible.builtin.apt_key:
-          url: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/Release.key"
-          state: present
-
-      - name: Add second key for CRI-O
-        ansible.builtin.apt_key:
-          url: "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:{{ download_version }}/{{ download_os }}/Release.key"
-          state: present
-
-      - name: Add first repository for CRI-O
-        ansible.builtin.apt_repository:
-          repo: "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/ /"
-          state: present
-          filename: "devel:kubic:libcontainers:stable.list"
-          update_cache: yes
-
-      - name: Add second repository for CRI-O
-        ansible.builtin.apt_repository:
-          repo: "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ download_version }}/{{ download_os }}/ /"
-          state: present
-          filename: "devel:kubic:libcontainers:stable:cri-o:{{ download_version }}.list"
-          update_cache: yes
-
-      - name: Update to fetch CRI-O repos
-        apt:
-          update_cache: yes
+          - { repo: "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/ /", 
+              filename: "devel:kubic:libcontainers:stable" }
+          - { repo: "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ download_version }}/{{ download_os }}/ /",
+              filename: "devel:kubic:libcontainers:stable:cri-o:{{ download_version }}" }
 
       - name: Install CRI-O packages
         apt:
+          update_cache: yes
           pkg:
             - cri-o
             - cri-o-runc
 
-      - name: Enable crio
+      - name: Enable CRI-O & kubelet services
         ansible.builtin.systemd:
-          name: crio
+          name: "{{ item }}"
           enabled: yes
           daemon_reload: yes
           state: started
-
-      - name: Enable kubelet service
-        ansible.builtin.systemd:
-          name: kubelet
-          enabled: yes
-          state: started
+        loop:
+          - "crio"
+          - "kubelet"
 
       - name: Pull required images
         ansible.builtin.shell:
@@ -159,7 +151,7 @@
 
       - name: Bootstrap cluster
         ansible.builtin.shell:
-          cmd: kubeadm init --pod-network-cidr=10.10.0.0/16
+          cmd: kubeadm init --pod-network-cidr=172.16.0.0/16
 
       - name: Create user-level directory for ansible config
         ansible.builtin.file:
@@ -182,36 +174,98 @@
         loop:
           "{{ defaultusers }}"
 
-      - name: Verify the apiserver manifest config file exists
-        wait_for:
-          path: "{{ kubeapimanifest }}"
-          timeout: 180
+      - name: Set up ddns hostname updates for metallb
+        block:
+          - name: Create config directory for nsupdate
+            ansible.builtin.file:
+              path: /etc/nsupdate
+              owner: root
+              group: root
+              mode: '0600'
+              state: directory
+
+          - name: Create nsupdate script from template
+            ansible.builtin.template:
+              src:  /etc/ansible-secure/dns/update_dns.kubernetes
+              dest: /etc/nsupdate/update_dns.kubernetes
+              owner: root
+              group: root
+              mode: '0600'
+
+          - name: Copy ddns key
+            ansible.builtin.copy:
+              src: /etc/ansible-secure/dns/ddns-keyfile.key
+              dest: /etc/nsupdate/ddns-keyfile.key
+              owner: root
+              group: root
+              mode: '0600'
+
+          - name: Create entry to dynamically update kubernetes dns everytime dhcp is renewed
+            ansible.builtin.copy:
+              dest: /etc/dhcp/dhclient-exit-hooks.d/update_dns_kubernetes
+              content: |
+                /usr/bin/nsupdate -k /etc/nsupdate/ddns-keyfile.key /etc/nsupdate/update_dns.kubernetes
+              owner: root
+              group: root
+              mode: '0660'
+
+          - name: Dynamically update ddns now
+            ansible.builtin.shell:
+              cmd: /usr/bin/nsupdate -k /etc/nsupdate/ddns-keyfile.key /etc/nsupdate/update_dns.kubernetes
+        when: metallb
 
       - name: Run the final kubectl commands as the kubectl user
         block:
-          - name: Wait for kube-apiserver to be running
-            ansible.builtin.shell:
-              cmd: kubectl get all -n kube-system | grep kube-apiserver | grep Running
-            retries: 5
-            delay: 60
-
-          - name: Allow control-plane node to run pods (single node cluster setup)
-            shell:
-              cmd: kubectl taint nodes --all node-role.kubernetes.io/master-
-    
-          - name: Install Tigera Calico operator
-            shell:
-              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/tigera-operator.yaml
-    
-          - name: Install Calico
-            shell:
-              cmd: kubectl create -f https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml
-
-          - name: Copy over some useful 'hello world' files
+          - name: Copy over some useful files
             ansible.builtin.copy:
-              src: /etc/ansible-secure/kubernetes/k8s-helloworld
+              src: /etc/ansible-secure/kubernetes/k8s-files
               dest: "/home/{{ kubectluser }}/"
               owner: "{{ kubectluser }}"
               group: "{{ kubectluser }}"
               mode: 0600
+
+          - name: Allow control-plane node to run pods (single node cluster setup)
+            ansible.builtin.shell:
+              cmd: kubectl taint nodes --all node-role.kubernetes.io/master-
+    
+          - name: Install Tigera Calico operator
+            ansible.builtin.shell:
+              cmd: |
+                kubectl create -f https://projectcalico.docs.tigera.io/manifests/tigera-operator.yaml
+                kubectl create -f https://projectcalico.docs.tigera.io/manifests/custom-resources.yaml
+            when: calico
+
+          - name: Install Metallb
+            block:
+              - name: Create Metallb namespace & manifest
+                ansible.builtin.shell:
+                  cmd: |
+                    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
+                    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml 
+    
+              - name: Wait a minute for the Metallb manifest to be created
+                pause:
+                  minutes: 1
+
+              - name: Add ip to Metallb configmap
+                ansible.builtin.replace:
+                  path:    "~/k8s-files/metallb-configmap.yaml"
+                  regexp:  "^      - IP_ADDR_CHANGE"
+                  replace: "      - {{ metallbip }}-{{ metallbip }}"
+    
+              - name: Apply the Metallb configmap
+                ansible.builtin.shell:
+                  cmd: "kubectl apply -f ~/k8s-files/metallb-configmap.yaml"
+            when: metallb
+
+          - name: Install ingress-nginx
+            block:
+              - name: Apply baremetal install
+                ansible.builtin.shell:
+                  cmd: |
+                    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.1.2/deploy/static/provider/baremetal/deploy.yaml
+              - name: Configure ingress-nginx
+                ansible.builtin.shell:
+                  cmd: "kubectl apply -f ~/k8s-files/ingress-diff.yaml"
+            when: ingressnginx
         become_user: "{{ kubectluser }}"
