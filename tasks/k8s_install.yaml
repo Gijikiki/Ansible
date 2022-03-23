@@ -98,25 +98,6 @@
         ansible.builtin.shell: |
           sysctl --system
 
-#      - name: Bypass proxy for CRI-O packages
-#        lineinfile:
-#          path:   /etc/apt/apt.conf
-#          line:   "{{ item }}"
-#          create: yes
-#        loop:
-#          - "Acquire::http::Proxy::download.opensuse.org DIRECT;"
-#          - "Acquire::http::Proxy::downloadcontent.opensuse.org DIRECT;"
-#          - "Acquire::http::Proxy::mirrorcache.opensuse.org DIRECT;"
-#          - "Acquire::http::Proxy::mirrorcache-us.opensuse.org DIRECT;"
-#
-#      - name: Add keys for CRI-O
-#        ansible.builtin.apt_key:
-#          url: "{{ item }}"
-#          state: present
-#        loop:
-#          - "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ download_os }}/Release.key"
-#          - "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:{{ download_version }}/{{ download_os }}/Release.key"
-
       - name: Add repositories for CRI-O
         ansible.builtin.apt_repository:
           repo: "{{ item.repo }}"
